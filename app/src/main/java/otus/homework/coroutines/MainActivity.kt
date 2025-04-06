@@ -2,10 +2,16 @@ package otus.homework.coroutines
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
-    lateinit var catsPresenter: CatsPresenter
+    private val catsViewModel by lazy {
+        ViewModelProvider(this)[CatsViewModel::class.java]
+    }
 
     private val diContainer = DiContainer()
 
@@ -13,18 +19,18 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         val view = layoutInflater.inflate(R.layout.activity_main, null) as CatsView
+        view.setRefreshListener { catsViewModel.onRefresh() }
         setContentView(view)
 
-        catsPresenter = CatsPresenter(diContainer.service)
-        view.presenter = catsPresenter
-        catsPresenter.attachView(view)
-        catsPresenter.onInitComplete()
-    }
+        catsViewModel.onCreate(
+            catsService = diContainer.service,
+            catsImageService = diContainer.catsImageService
+        )
 
-    override fun onStop() {
-        if (isFinishing) {
-            catsPresenter.detachView()
+        lifecycleScope.launch {
+            catsViewModel.state.collectLatest { newState ->
+                view.populate(newState)
+            }
         }
-        super.onStop()
     }
 }

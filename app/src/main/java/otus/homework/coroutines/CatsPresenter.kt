@@ -1,39 +1,40 @@
 package otus.homework.coroutines
 
-import android.content.Context
-import android.widget.Toast
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 
 class CatsPresenter(
-    private val catsService: CatsService
+    private val catsImageService: CatsImageService,
+    private val catsService: CatsService,
 ) {
 
-    private var _catsView: ICatsView? = null
-    private var presenterJob: Job? = null
-
-
     private val presenterScope = CoroutineScope(Dispatchers.Main + CoroutineName("CatsCoroutine"))
+    private var _catsView: ICatsView? = null
 
     fun onInitComplete() {
-        presenterJob?.cancel()
-        presenterJob = presenterScope.launch {
+        presenterScope.launch {
             try {
-                val fact = withContext(Dispatchers.IO) {
-                    catsService.getCatFact()
-                }
-                _catsView?.populate(fact)
+                val fact = catsService.getCatFact()
+                val image = catsImageService.getCatImage()
+
+                _catsView?.populate(
+                    Result.Success(
+                        CatsFactState(
+                            fact.fact,
+                            image.firstOrNull()?.url.orEmpty()
+                        )
+                    )
+                )
+
             } catch (e: SocketTimeoutException) {
-                Toast.makeText(
-                    _catsView as Context,
-                    "Не удалось получить ответ",
-                    Toast.LENGTH_SHORT
-                ).show()
+                _catsView?.populate(Result.Error("Не удалось получить ответ"))
+            } catch (e: Exception) {
+                CrashMonitor.trackWarning()
+                _catsView?.populate(Result.Error(e.message.orEmpty()))
             }
         }
     }
@@ -44,6 +45,9 @@ class CatsPresenter(
 
     fun detachView() {
         _catsView = null
-        presenterJob?.cancel()
+    }
+
+    fun onStop() {
+        presenterScope.coroutineContext.cancel()
     }
 }
